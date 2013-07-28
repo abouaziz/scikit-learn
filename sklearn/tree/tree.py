@@ -27,7 +27,7 @@ from ..utils.validation import check_arrays
 
 from ._tree import Criterion, Splitter, Tree
 from . import _tree
-
+import SFS
 
 __all__ = ["DecisionTreeClassifier",
            "DecisionTreeRegressor",
@@ -85,7 +85,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         self.tree_ = None
 
     def fit(self, X, y, sample_mask=None, X_argsorted=None, check_input=True,
-            sample_weight=None):
+            sample_weight=None, topics = [],enrichment_proportion=2/3,threshold=0):
         """Build a decision tree from the training set (X, y).
 
         Parameters
@@ -136,6 +136,20 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         n_samples, self.n_features_ = X.shape
         is_classification = isinstance(self, ClassifierMixin)
 
+	# prepare features in case of semantic classification	
+	UsedFeatures = []
+	if (self.max_features == "semantic"):
+		AllFeatures=[]
+		AllFeatures = np.arange(self.n_features_, dtype=np.int32)
+		max_features = max(1, int(np.sqrt(self.n_features_)*enrichment_proportion))
+		sqrt_features=max(1, int(np.sqrt(self.n_features_)))
+		
+		random_state.shuffle(AllFeatures)
+		for i in range(max_features):
+			UsedFeatures = UsedFeatures + SFS.findSemanticWord(AllFeatures[i],topics,threshold)
+		
+		UsedFeatures = list(set(UsedFeatures))	
+        
         y = np.atleast_1d(y)
         if y.ndim == 1:
             # reshape is necessary to preserve the data contiguity against vs
@@ -177,6 +191,8 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
                 max_features = max(1, int(np.sqrt(self.n_features_)))
             elif self.max_features == "log2":
                 max_features = max(1, int(np.log2(self.n_features_)))
+	    elif self.max_features == "semantic":
+		max_features = max(1, int(np.sqrt(self.n_features_)))
             else:
                 raise ValueError(
                     'Invalid value for max_features. Allowed string '
@@ -241,7 +257,10 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
                           min_samples_split, self.min_samples_leaf,
                           random_state)
 
-        self.tree_.build(X, y, sample_weight=sample_weight)
+	if (self.max_features == "semantic"):        
+		self.tree_.build(X, y, UsedFeatures, sample_weight=sample_weight)
+	else:
+		self.tree_.build(X, y, sample_weight=sample_weight)
 
         if self.n_outputs_ == 1:
             self.n_classes_ = self.n_classes_[0]

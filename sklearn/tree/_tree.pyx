@@ -817,7 +817,7 @@ cdef class Splitter:
 
     cdef void init(self, np.ndarray[DTYPE_t, ndim=2, mode="c"] X,
                          np.ndarray[DOUBLE_t, ndim=2, mode="c"] y,
-                         DOUBLE_t* sample_weight):
+                         DOUBLE_t* sample_weight, featuresToUse = []):
         """Initialize the splitter."""
         # Free old structures if any
         if self.samples != NULL:
@@ -847,12 +847,23 @@ cdef class Splitter:
         cdef SIZE_t n_features = X.shape[1]
         cdef SIZE_t* features = <SIZE_t*> malloc(n_features * sizeof(SIZE_t))
 
-        for i from 0 <= i < n_features:
-            features[i] = i
-
-        self.features = features
-        self.n_features = n_features
-
+        #for i from 0 <= i < n_features:
+        #    features[i] = i
+        
+        if not featuresToUse:
+             for i from 0 <= i < n_features:
+                 features[i] = i
+          
+             self.features = features
+             self.n_features = n_features
+        
+        else:
+             for i from 0 <= i < len(featuresToUse):
+                  features[i] = featuresToUse[i]
+             #self.features = np.array(featuresToUSe, dtype=np.int32)
+             self.features = features
+             self.n_features = len(featuresToUse)
+        
         # Initialize X, y, sample_weight
         self.X = X
         self.y = <DOUBLE_t*> y.data
@@ -1468,7 +1479,7 @@ cdef class Tree:
         return node_id
 
     cpdef build(self, np.ndarray X,
-                      np.ndarray y,
+                      np.ndarray y, FeaturesToUse= [],
                       np.ndarray sample_weight=None):
         """Build a decision tree from the training set (X, y)."""
         # Prepare data before recursive partitioning
@@ -1498,7 +1509,7 @@ cdef class Tree:
 
         # Recursive partition (without actual recursion)
         cdef Splitter splitter = self.splitter
-        splitter.init(X, y, sample_weight_ptr)
+        splitter.init(X, y, sample_weight_ptr, FeaturesToUse)
 
         cdef SIZE_t stack_n_values = 5
         cdef SIZE_t stack_capacity = 50
@@ -1545,7 +1556,7 @@ cdef class Tree:
             if not is_leaf:
                 splitter.node_split(&pos, &feature, &threshold)
                 is_leaf = is_leaf or (pos >= end)
-
+            
             node_id = self._add_node(parent, is_left, is_leaf, feature,
                                      threshold, impurity, n_node_samples)
 

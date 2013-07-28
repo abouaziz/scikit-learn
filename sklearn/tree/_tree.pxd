@@ -84,7 +84,7 @@ cdef class Splitter:
     # Methods
     cdef void init(self, np.ndarray X,
                          np.ndarray y,
-                         DOUBLE_t* sample_weight)
+                         DOUBLE_t* sample_weight, featuresToUse=*)
 
     cdef void node_reset(self, SIZE_t start, SIZE_t end, double* impurity)
 
@@ -136,7 +136,7 @@ cdef class Tree:
     cdef void _resize(self, SIZE_t capacity=*)
 
     cpdef build(self, np.ndarray X,
-                      np.ndarray y,
+                      np.ndarray y, FeaturesToUse=*,
                       np.ndarray sample_weight=*)
 
     cpdef predict(self, np.ndarray[DTYPE_t, ndim=2] X)

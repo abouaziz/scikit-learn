@@ -68,7 +68,7 @@ MAX_INT = np.iinfo(np.int32).max
 
 
 def _parallel_build_trees(n_trees, forest, X, y,
-                          sample_weight, seeds, verbose):
+                          sample_weight, seeds, verbose, topics,enrichment_proportion, threshold):
     """Private function used to build a batch of trees within a job."""
     trees = []
 
@@ -94,14 +94,14 @@ def _parallel_build_trees(n_trees, forest, X, y,
 
             tree.fit(X, y,
                      sample_weight=curr_sample_weight,
-                     check_input=False)
+                     check_input=False, topics = topics,enrichment_proportion=enrichment_proportion,threshold=threshold)
 
             tree.indices_ = sample_counts > 0.
 
         else:
             tree.fit(X, y,
                      sample_weight=sample_weight,
-                     check_input=False)
+                     check_input=False, topics = topics,enrichment_proportion=enrichment_proportion,threshold=threshold)
 
         trees.append(tree)
 
@@ -291,7 +291,10 @@ class BaseForest(six.with_metaclass(ABCMeta, BaseEnsemble,
                 y,
                 sample_weight,
                 seeds[i],
-                verbose=self.verbose)
+                verbose=self.verbose,
+		topics=self.topics,
+		enrichment_proportion=self.enrichment_proportion,
+		threshold=self.threshold)
             for i in range(n_jobs))
 
         # Reduce
@@ -745,7 +748,8 @@ class RandomForestClassifier(ForestClassifier):
                  random_state=None,
                  verbose=0,
                  min_density=None,
-                 compute_importances=None):
+                 compute_importances=None,
+		 topics = [], enrichment_proportion = 2/3, threshold=0):
         super(RandomForestClassifier, self).__init__(
             base_estimator=DecisionTreeClassifier(),
             n_estimators=n_estimators,
@@ -763,7 +767,9 @@ class RandomForestClassifier(ForestClassifier):
         self.min_samples_split = min_samples_split
         self.min_samples_leaf = min_samples_leaf
         self.max_features = max_features
-
+	self.topics = topics
+	self.enrichment_proportion = enrichment_proportion
+	self.threshold=threshold
         if min_density is not None:
             warn("The min_density parameter is deprecated as of version 0.14 "
                  "and will be removed in 0.16.", DeprecationWarning)
