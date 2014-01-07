@@ -18,7 +18,7 @@ from libc.math cimport log2 as log
 import numpy as np
 cimport numpy as np
 np.import_array()
-
+import SFS
 cdef extern:
     int sklearn_rand_r(unsigned int *seedp) nogil
 
@@ -803,7 +803,7 @@ cdef class Splitter:
         self.max_features = max_features
         self.min_samples_leaf = min_samples_leaf
         self.random_state = random_state
-
+  
     def __dealloc__(self):
         """Destructor."""
         free(self.samples)
@@ -858,6 +858,7 @@ cdef class Splitter:
              self.n_features = n_features
         
         else:
+             #print "your tree is build from your features to use avec une taille", len(featuresToUse)
              for i from 0 <= i < len(featuresToUse):
                   features[i] = featuresToUse[i]
              #self.features = np.array(featuresToUSe, dtype=np.int32)
@@ -887,7 +888,7 @@ cdef class Splitter:
 
         impurity[0] =  criterion.node_impurity()
 
-    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold):
+    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold, EnrichmentMatrix={}):
         """Find a split on node samples[start:end]."""
         pass
 
@@ -904,7 +905,7 @@ cdef class BestSplitter(Splitter):
                                self.min_samples_leaf,
                                self.random_state), self.__getstate__())
 
-    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold):
+    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold, EnrichmentMatrix={}):
         """Find the best split on node samples[start:end]."""
         # Find the best split
         cdef Criterion criterion = self.criterion
@@ -914,6 +915,7 @@ cdef class BestSplitter(Splitter):
 
         cdef SIZE_t* features = self.features
         cdef SIZE_t n_features = self.n_features
+        #cdef SIZE_t* featuresToEnrich = <SIZE_t*> malloc((self.max_features)* sizeof(SIZE_t))
 
         cdef np.ndarray[DTYPE_t, ndim=2, mode="c"] X = self.X
         cdef SIZE_t max_features = self.max_features
@@ -935,86 +937,191 @@ cdef class BestSplitter(Splitter):
 
         cdef SIZE_t partition_start
         cdef SIZE_t partition_end
+        cdef SIZE_t* UsedFeaturesNode =NULL
+        if not EnrichmentMatrix :
+            for f_idx from 0 <= f_idx < n_features:
+                # Draw a feature at random
+           
+                f_i = n_features - f_idx - 1
+                f_j = rand_int(n_features - f_idx, random_state)
 
-        for f_idx from 0 <= f_idx < n_features:
-            # Draw a feature at random
-            f_i = n_features - f_idx - 1
-            f_j = rand_int(n_features - f_idx, random_state)
+                tmp = features[f_i]
+                features[f_i] = features[f_j]
+                features[f_j] = tmp
+                current_feature = features[f_i]
 
-            tmp = features[f_i]
-            features[f_i] = features[f_j]
-            features[f_j] = tmp
+                # Sort samples along that feature
+                sort(X, current_feature, samples+start, end-start)
 
-            current_feature = features[f_i]
+                # Evaluate all splits
+                criterion.reset()
+                p = start
 
-            # Sort samples along that feature
-            sort(X, current_feature, samples+start, end-start)
+                while p < end:
+                    while ((p + 1 < end) and
+                           (X[samples[p + 1], current_feature] <= X[samples[p], current_feature] + 1.e-7)):
+                        p += 1
 
-            # Evaluate all splits
-            criterion.reset()
-            p = start
-
-            while p < end:
-                while ((p + 1 < end) and
-                       (X[samples[p + 1], current_feature] <= X[samples[p], current_feature] + 1.e-7)):
+                    # p + 1 >= end or X[samples[p + 1], current_feature] > X[samples[p], current_feature]
                     p += 1
+                    # p >= end or X[samples[p], current_feature] > X[samples[p - 1], current_feature]
 
-                # p + 1 >= end or X[samples[p + 1], current_feature] > X[samples[p], current_feature]
-                p += 1
-                # p >= end or X[samples[p], current_feature] > X[samples[p - 1], current_feature]
+                    if p < end:
+                        current_pos = p
 
-                if p < end:
-                    current_pos = p
+                        # Reject if min_samples_leaf is not guaranteed
+                        if (((current_pos - start) < min_samples_leaf) or
+                            ((end - current_pos) < min_samples_leaf)):
+                           continue
 
-                    # Reject if min_samples_leaf is not guaranteed
-                    if (((current_pos - start) < min_samples_leaf) or
-                        ((end - current_pos) < min_samples_leaf)):
-                       continue
+                        criterion.update(current_pos)
+                        current_impurity = criterion.children_impurity()
 
-                    criterion.update(current_pos)
-                    current_impurity = criterion.children_impurity()
+                        if current_impurity < best_impurity:
+                            best_impurity = current_impurity
+                            best_pos = current_pos
+                            best_feature = current_feature
 
-                    if current_impurity < best_impurity:
-                        best_impurity = current_impurity
-                        best_pos = current_pos
-                        best_feature = current_feature
+                            current_threshold = (X[samples[p - 1], current_feature] + X[samples[p], current_feature]) / 2.0
+                            if current_threshold == X[samples[p], current_feature]:
+                                 current_threshold = X[samples[p - 1], current_feature]
 
-                        current_threshold = (X[samples[p - 1], current_feature] + X[samples[p], current_feature]) / 2.0
-                        if current_threshold == X[samples[p], current_feature]:
-                            current_threshold = X[samples[p - 1], current_feature]
+                            best_threshold = current_threshold
 
-                        best_threshold = current_threshold
+                if best_pos == end: # No valid split was ever found
+                    continue
 
-            if best_pos == end: # No valid split was ever found
-                continue
+                # Count one more visited feature
+                visited_features += 1
 
-            # Count one more visited feature
-            visited_features += 1
+                if visited_features >= max_features:
+                    break
 
-            if visited_features >= max_features:
-                break
+            # Reorganize samples into samples[start:best_pos] + samples[best_pos:end]
+            if best_pos < end:
+                partition_start = start
+                partition_end = end
+                p = start
 
-        # Reorganize samples into samples[start:best_pos] + samples[best_pos:end]
-        if best_pos < end:
-            partition_start = start
-            partition_end = end
-            p = start
+                while p < partition_end:
+                    if X[samples[p], best_feature] <= best_threshold:
+                        p += 1
 
-            while p < partition_end:
-                if X[samples[p], best_feature] <= best_threshold:
-                    p += 1
+                    else:
+                        partition_end -= 1
 
+                        tmp = samples[partition_end]
+                        samples[partition_end] = samples[p]
+                        samples[p] = tmp
+
+            # Return values
+            pos[0] = best_pos
+            feature[0] = best_feature
+            threshold[0] = best_threshold
+
+        else:
+            featuresToEnrich=[]
+            
+ 
+            for f_idx from 0 <= f_idx < n_features:
+                # Draw a feature at random
+           
+                f_i = n_features - f_idx - 1
+                f_j = rand_int(n_features - f_idx, random_state)
+
+                tmp = features[f_i]
+                features[f_i] = features[f_j]
+                features[f_j] = tmp
+                featuresToEnrich.append(features[f_i])
+                visited_features += 1
+                if visited_features >= max_features:
+                    break
+        
+            knodes= []
+
+            for featrure in featuresToEnrich:
+                
+                if featrure in EnrichmentMatrix.keys():
+                    knodes= knodes + EnrichmentMatrix[featrure]
                 else:
-                    partition_end -= 1
+                    knodes.append(featrure)
+            lenknodes=len(knodes)        
+           
+            for f_idx from 0 <= f_idx < lenknodes:
+               
+                current_feature = knodes[f_idx]
 
-                    tmp = samples[partition_end]
-                    samples[partition_end] = samples[p]
-                    samples[p] = tmp
+                # Sort samples along that feature
+                sort(X, current_feature, samples+start, end-start)
 
-        # Return values
-        pos[0] = best_pos
-        feature[0] = best_feature
-        threshold[0] = best_threshold
+                # Evaluate all splits
+                criterion.reset()
+                p = start
+
+                while p < end:
+                    while ((p + 1 < end) and
+                        (X[samples[p + 1], current_feature] <= X[samples[p], current_feature] + 1.e-7)):
+                        p += 1
+
+                    # p + 1 >= end or X[samples[p + 1], current_feature] > X[samples[p], current_feature]
+                    p += 1
+                    # p >= end or X[samples[p], current_feature] > X[samples[p - 1], current_feature]
+
+                    if p < end:
+                        current_pos = p
+
+                        # Reject if min_samples_leaf is not guaranteed
+                        if (((current_pos - start) < min_samples_leaf) or
+                            ((end - current_pos) < min_samples_leaf)):
+                           continue
+
+                        criterion.update(current_pos)
+                        current_impurity = criterion.children_impurity()
+
+                        if current_impurity < best_impurity:
+                            best_impurity = current_impurity
+                            best_pos = current_pos
+                            best_feature = current_feature
+
+                            current_threshold = (X[samples[p - 1], current_feature] + X[samples[p], current_feature]) / 2.0
+                            if current_threshold == X[samples[p], current_feature]:
+                                current_threshold = X[samples[p - 1], current_feature]
+
+                            best_threshold = current_threshold
+
+                if best_pos == end: # No valid split was ever found
+                    continue
+                '''
+                # Count one more visited feature
+                visited_features += 1
+
+                if visited_features >= max_features:
+                    break'''
+
+            # Reorganize samples into samples[start:best_pos] + samples[best_pos:end]
+            if best_pos < end:
+                partition_start = start
+                partition_end = end
+                p = start
+
+                while p < partition_end:
+                    if X[samples[p], best_feature] <= best_threshold:
+                        p += 1
+
+                    else:
+                        partition_end -= 1
+
+                        tmp = samples[partition_end]
+                        samples[partition_end] = samples[p]
+                        samples[p] = tmp
+
+            # Return values
+            pos[0] = best_pos
+            feature[0] = best_feature
+            threshold[0] = best_threshold
+	
+         
+
 
 cdef void sort(np.ndarray[DTYPE_t, ndim=2, mode="c"] X, SIZE_t current_feature,
                SIZE_t* samples, SIZE_t length):
@@ -1066,7 +1173,7 @@ cdef class RandomSplitter(Splitter):
                                  self.min_samples_leaf,
                                  self.random_state), self.__getstate__())
 
-    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold):
+    cdef void node_split(self, SIZE_t* pos, SIZE_t* feature, double* threshold, EnrichmentMatrix={}):
         """Find the best random split on node samples[start:end]."""
         # Draw random splits and pick the best
         cdef Criterion criterion = self.criterion
@@ -1076,6 +1183,7 @@ cdef class RandomSplitter(Splitter):
 
         cdef SIZE_t* features = self.features
         cdef SIZE_t n_features = self.n_features
+         
 
         cdef np.ndarray[DTYPE_t, ndim=2, mode="c"] X = self.X
         cdef SIZE_t max_features = self.max_features
@@ -1102,6 +1210,7 @@ cdef class RandomSplitter(Splitter):
         cdef SIZE_t partition_end
 
         for f_idx from 0 <= f_idx < n_features:
+            
             # Draw a feature at random
             f_i = n_features - f_idx - 1
             f_j = rand_int(n_features - f_idx, random_state)
@@ -1479,9 +1588,12 @@ cdef class Tree:
         return node_id
 
     cpdef build(self, np.ndarray X,
-                      np.ndarray y, FeaturesToUse= [],
-                      np.ndarray sample_weight=None):
+                      np.ndarray y, FeaturesToUse = [],
+                      np.ndarray sample_weight=None,EnrichmentMatrix={}):
         """Build a decision tree from the training set (X, y)."""
+        
+        
+        
         # Prepare data before recursive partitioning
         if X.dtype != DTYPE or not X.flags.contiguous:
             X = np.asarray(X, dtype=DTYPE, order="C")
@@ -1554,7 +1666,7 @@ cdef class Tree:
             is_leaf = is_leaf or (impurity == 0.0)
 
             if not is_leaf:
-                splitter.node_split(&pos, &feature, &threshold)
+                splitter.node_split(&pos, &feature, &threshold,EnrichmentMatrix)
                 is_leaf = is_leaf or (pos >= end)
             
             node_id = self._add_node(parent, is_left, is_leaf, feature,
@@ -1584,7 +1696,7 @@ cdef class Tree:
                 stack[stack_n_values + 3] = node_id
                 stack[stack_n_values + 4] = 1
                 stack_n_values += 5
-
+        #print "la profondeur de l'arbre est", self.node_count
         self._resize(self.node_count)
         free(stack)
 

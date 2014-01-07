@@ -11,7 +11,7 @@ randomized trees. Single and multi-output problems are both handled.
 # Licence: BSD 3 clause
 
 from __future__ import division
-
+import math
 import numbers
 import numpy as np
 from abc import ABCMeta, abstractmethod
@@ -84,8 +84,9 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         self.splitter_ = None
         self.tree_ = None
 
-    def fit(self, X, y, sample_mask=None, X_argsorted=None, check_input=True,
-            sample_weight=None, topics = [],enrichment_proportion=2/3,threshold=0):
+    def fit(self, X, y,n_trees, sample_mask=None, X_argsorted=None, check_input=True,
+            sample_weight=None, topics = [], featuresToAdd=[], enrichment_proportion=2/3,threshold=0):
+        
         """Build a decision tree from the training set (X, y).
 
         Parameters
@@ -116,6 +117,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         self : object
             Returns self.
         """
+        
         random_state = check_random_state(self.random_state)
 
         # Deprecations
@@ -138,8 +140,10 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
 
 	# prepare features in case of semantic classification	
 	UsedFeatures = []
+	#print self.n_features_
+	EnrichmentMatrix = {}
 	if (self.max_features == "semantic"):
-		AllFeatures=[]
+		
 		AllFeatures = np.arange(self.n_features_, dtype=np.int32)
 		max_features = max(1, int(np.sqrt(self.n_features_)*enrichment_proportion))
 		sqrt_features=max(1, int(np.sqrt(self.n_features_)))
@@ -148,8 +152,35 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
 		for i in range(max_features):
 			UsedFeatures = UsedFeatures + SFS.findSemanticWord(AllFeatures[i],topics,threshold)
 		
-		UsedFeatures = list(set(UsedFeatures))	
-        
+		UsedFeatures = list(set(UsedFeatures))
+                
+
+
+        elif (self.max_features == "distributed_semantic"):
+		
+        	numberFeatureToAdd = int(len(topics[2])/n_trees)
+
+		if numberFeatureToAdd <1:
+			numberFeatureToAdd = 1
+
+		for topic in topics:
+			random_state.shuffle(topic)
+			for i in range(numberFeatureToAdd):
+				UsedFeatures.append(topic[i])
+		random_state.shuffle(featuresToAdd)
+		featuresNotAssigned= int(len(featuresToAdd)/n_trees)
+		for f in range(featuresNotAssigned):
+			UsedFeatures.append(featuresToAdd[f])
+		
+  		
+	elif (self.max_features == "semantic_node"):
+		
+		AllFeatures = np.arange(self.n_features_, dtype=np.int32)
+				
+		for i in range(self.n_features_):
+			EnrichmentMatrix[i] = list(set(SFS.findSemanticWord(AllFeatures[i],topics,threshold)))
+		
+		       
         y = np.atleast_1d(y)
         if y.ndim == 1:
             # reshape is necessary to preserve the data contiguity against vs
@@ -192,6 +223,10 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
             elif self.max_features == "log2":
                 max_features = max(1, int(np.log2(self.n_features_)))
 	    elif self.max_features == "semantic":
+		max_features = max(1, int(np.sqrt(self.n_features_)))
+	    elif self.max_features == "semantic_node":
+		max_features = max(1, int(np.sqrt(self.n_features_)))
+            elif self.max_features == "distributed_semantic":
 		max_features = max(1, int(np.sqrt(self.n_features_)))
             else:
                 raise ValueError(
@@ -258,7 +293,11 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
                           random_state)
 
 	if (self.max_features == "semantic"):        
-		self.tree_.build(X, y, UsedFeatures, sample_weight=sample_weight)
+		self.tree_.build(X, y, FeaturesToUse = UsedFeatures, sample_weight=sample_weight)
+	elif (self.max_features == "semantic_node"):
+		self.tree_.build(X, y, EnrichmentMatrix = EnrichmentMatrix, sample_weight=sample_weight)
+	elif (self.max_features == "distributed_semantic"):
+		self.tree_.build(X, y, FeaturesToUse = UsedFeatures, sample_weight=sample_weight)
 	else:
 		self.tree_.build(X, y, sample_weight=sample_weight)
 

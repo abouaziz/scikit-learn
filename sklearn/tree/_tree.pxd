@@ -90,11 +90,9 @@ cdef class Splitter:
 
     cdef void node_split(self, SIZE_t* pos, # Set to >= end if the node is a leaf
                                SIZE_t* feature,
-                               double* threshold)
+                               double* threshold, EnrichmentMatrix=*)
 
     cdef void node_value(self, double* dest)
-
-
 # =============================================================================
 # Tree
 # =============================================================================
@@ -136,8 +134,9 @@ cdef class Tree:
     cdef void _resize(self, SIZE_t capacity=*)
 
     cpdef build(self, np.ndarray X,
-                      np.ndarray y, FeaturesToUse=*,
-                      np.ndarray sample_weight=*)
+                      np.ndarray y, FeaturesToUse=*, 
+                      np.ndarray sample_weight=*,
+                      EnrichmentMatrix=*)
 
     cpdef predict(self, np.ndarray[DTYPE_t, ndim=2] X)
     cpdef apply(self, np.ndarray[DTYPE_t, ndim=2] X)

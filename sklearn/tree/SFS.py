@@ -28,7 +28,7 @@ def findSemanticWord(word,topics,threshold=0):
         for j in topicChoisi.keys():
 	     if(j>threshold):
 	     	  listmotAajouter = listmotAajouter + topicChoisi[j]
-    
+                  
     if not listmotAajouter:
 	listmotAajouter.append(word)
     
