@@ -68,7 +68,7 @@ MAX_INT = np.iinfo(np.int32).max
 
 
 def _parallel_build_trees(n_trees, forest, X, y,
-                          sample_weight, seeds, verbose, topics,enrichment_proportion, threshold):
+                          sample_weight, seeds, verbose, topics,featuresToAdd,enrichment_proportion, threshold):
     """Private function used to build a batch of trees within a job."""
     trees = []
 
@@ -92,16 +92,17 @@ def _parallel_build_trees(n_trees, forest, X, y,
             sample_counts = bincount(indices, minlength=n_samples)
             curr_sample_weight *= sample_counts
 
-            tree.fit(X, y,
+            tree.fit(X, y,n_trees,
                      sample_weight=curr_sample_weight,
-                     check_input=False, topics = topics,enrichment_proportion=enrichment_proportion,threshold=threshold)
+                     check_input=False, topics = topics, featuresToAdd = featuresToAdd,enrichment_proportion=enrichment_proportion,threshold=threshold)
 
             tree.indices_ = sample_counts > 0.
 
         else:
             tree.fit(X, y,
+		     n_trees,
                      sample_weight=sample_weight,
-                     check_input=False, topics = topics,enrichment_proportion=enrichment_proportion,threshold=threshold)
+                     check_input=False, topics = topics,featuresToAdd = featuresToAdd, enrichment_proportion=enrichment_proportion,threshold=threshold)
 
         trees.append(tree)
 
@@ -293,6 +294,7 @@ class BaseForest(six.with_metaclass(ABCMeta, BaseEnsemble,
                 seeds[i],
                 verbose=self.verbose,
 		topics=self.topics,
+		featuresToAdd=self.featuresToAdd,
 		enrichment_proportion=self.enrichment_proportion,
 		threshold=self.threshold)
             for i in range(n_jobs))
@@ -749,7 +751,10 @@ class RandomForestClassifier(ForestClassifier):
                  verbose=0,
                  min_density=None,
                  compute_importances=None,
-		 topics = [], enrichment_proportion = 2/3, threshold=0):
+		 topics = [],
+                 featuresToAdd=[],
+                 enrichment_proportion = 2/3, 
+                 threshold=0):
         super(RandomForestClassifier, self).__init__(
             base_estimator=DecisionTreeClassifier(),
             n_estimators=n_estimators,
@@ -768,8 +773,10 @@ class RandomForestClassifier(ForestClassifier):
         self.min_samples_leaf = min_samples_leaf
         self.max_features = max_features
 	self.topics = topics
+	self.featuresToAdd=featuresToAdd	
 	self.enrichment_proportion = enrichment_proportion
 	self.threshold=threshold
+        
         if min_density is not None:
             warn("The min_density parameter is deprecated as of version 0.14 "
                  "and will be removed in 0.16.", DeprecationWarning)
