@@ -159,7 +159,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
         elif (self.max_features == "distributed_semantic"):
 		
         	numberFeatureToAdd = int(len(topics[2])/n_trees)
-
+		
 		if numberFeatureToAdd <1:
 			numberFeatureToAdd = 1
 
@@ -171,8 +171,7 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
 		featuresNotAssigned= int(len(featuresToAdd)/n_trees)
 		for f in range(featuresNotAssigned):
 			UsedFeatures.append(featuresToAdd[f])
-		
-  		
+	 		
 	elif (self.max_features == "semantic_node"):
 		
 		AllFeatures = np.arange(self.n_features_, dtype=np.int32)
@@ -227,6 +226,8 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
 	    elif self.max_features == "semantic_node":
 		max_features = max(1, int(np.sqrt(self.n_features_)))
             elif self.max_features == "distributed_semantic":
+		max_features = max(1, int(np.sqrt(self.n_features_)))
+	    elif self.max_features == "distributed_semantic_node":
 		max_features = max(1, int(np.sqrt(self.n_features_)))
             else:
                 raise ValueError(
@@ -298,6 +299,8 @@ class BaseDecisionTree(six.with_metaclass(ABCMeta, BaseEstimator,
 		self.tree_.build(X, y, EnrichmentMatrix = EnrichmentMatrix, sample_weight=sample_weight)
 	elif (self.max_features == "distributed_semantic"):
 		self.tree_.build(X, y, FeaturesToUse = UsedFeatures, sample_weight=sample_weight)
+	elif (self.max_features == "distributed_semantic_node"):
+		self.tree_.build(X, y, topicsToUse =topics, featuresNotAssToUse=featuresToAdd , sample_weight=sample_weight)
 	else:
 		self.tree_.build(X, y, sample_weight=sample_weight)
 

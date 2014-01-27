@@ -84,13 +84,13 @@ cdef class Splitter:
     # Methods
     cdef void init(self, np.ndarray X,
                          np.ndarray y,
-                         DOUBLE_t* sample_weight, featuresToUse=*)
+                         DOUBLE_t* sample_weight, featuresToUse=*, topicsToUse=*,featuresNotAssToUse=*)
 
     cdef void node_reset(self, SIZE_t start, SIZE_t end, double* impurity)
 
     cdef void node_split(self, SIZE_t* pos, # Set to >= end if the node is a leaf
                                SIZE_t* feature,
-                               double* threshold, EnrichmentMatrix=*)
+                               double* threshold,topicsToUse=*,featuresNotAssToUse=*,EnrichmentMatrix=*)
 
     cdef void node_value(self, double* dest)
 # =============================================================================
@@ -134,7 +134,7 @@ cdef class Tree:
     cdef void _resize(self, SIZE_t capacity=*)
 
     cpdef build(self, np.ndarray X,
-                      np.ndarray y, FeaturesToUse=*, 
+                      np.ndarray y, FeaturesToUse=*,topicsToUse=*, featuresNotAssToUse=*,
                       np.ndarray sample_weight=*,
                       EnrichmentMatrix=*)
 
